@@ -66,9 +66,17 @@
         }
 
         // Tesseractの初期化 (高速化のためにWorkerを作って使い回す)
+        // Tesseractの初期化 (v4の正しい初期化手順に修正)
         async function initTesseract() {
-            worker = await Tesseract.createWorker('eng');
-            // 精度向上のため、認識する文字を数字と記号だけに限定 (日本語を外す)
+            worker = await Tesseract.createWorker({
+                logger: m => console.log(m) // コンソールで進捗を確認できます
+            });
+            
+            // v4では言語のロードと初期化を明示的に行う必要があります
+            await worker.loadLanguage('eng');
+            await worker.initialize('eng');
+            
+            // 初期化完了後にパラメータを設定
             await worker.setParameters({
                 tessedit_char_whitelist: '0123456789+-*/=()xX ',
             });
