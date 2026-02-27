@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CAB 四則逆算 OCR Solver</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #f0f0f0; margin: 0; padding: 20px; }
+        #video-container { position: relative; display: inline-block; width: 100%; max-width: 500px; }
+        video { width: 100%; border-radius: 8px; background: #000; }
+        #overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                   width: 80%; height: 60px; border: 2px solid #00ff00; pointer-events: none; }
+        #result-box { margin-top: 20px; padding: 15px; background: white; border-radius: 8px; font-size: 1.2rem; font-weight: bold; }
+        button { padding: 10px 20px; font-size: 1rem; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+    <h2>CAB 四則逆算ソルバー</h2>
+    <div id="video-container">
+        <video id="video" autoplay playsinline></video>
+        <div id="overlay"></div>
+    </div>
+    
+    <div id="result-box">
+        <div>スキャン結果: <span id="ocr-text">---</span></div>
+        <div style="color: #e63946;">答え (□): <span id="answer">---</span></div>
+    </div>
+
+    <p><button id="capture-btn">計算を実行</button></p>
+
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ocrTextElem = document.getElementById('ocr-text');
+        const answerElem = document.getElementById('answer');
+        const captureBtn = document.getElementById('capture-btn');
+
+        // カメラの起動
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment" } // 背面カメラ優先
+                });
+                video.srcObject = stream;
+            } catch (err) {
+                console.error("カメラの起動に失敗しました:", err);
+                alert("カメラを許可してください。");
+            }
+        }
+
+        // 数式の計算ロジック
+        function solveEquation(text) {
+            try {
+                // OCRの誤読補正と正規化
+                let eq = text.replace(/\s+/g, '')       // 空白削除
+                             .replace(/[口口]/g, 'x')  // 四角をxに
+                             .replace(/÷/g, '/')       // 記号変換
+                             .replace(/×/g, '*')
+                             .replace(/=/g, '==');
+
+                // CAB形式: A / x = B の場合を想定
+                // 文字列を分割して x を算出 (簡易実装)
+                if (eq.includes('==')) {
+                    const parts = eq.split('==');
+                    const left = parts[0];
+                    const right = parseFloat(parts[1]);
+
+                    // leftが "15/x" のような形の場合
+                    if (left.includes('/x')) {
+                        const a = parseFloat(left.split('/')[0]);
+                        return (a / right).toFixed(2);
+                    } else if (left.includes('x/')) {
+                        const b = parseFloat(left.split('/')[1]);
+                        return (right * b).toFixed(2);
+                    }
+                    // 他のパターンもここに追加可能
+                }
+                return "解析不能";
+            } catch (e) {
+                return "計算エラー";
+            }
+        }
+
+        // キャプチャとOCR実行
+        captureBtn.addEventListener('click', async () => {
+            captureBtn.disabled = true;
+            captureBtn.innerText = "スキャン中...";
+            
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // OCR実行 (日本語と英語の混合設定)
+            const { data: { text } } = await Tesseract.recognize(canvas, 'eng+jpn', {
+                logger: m => console.log(m)
+            });
+
+            ocrTextElem.innerText = text;
+            answerElem.innerText = solveEquation(text);
+
+            captureBtn.disabled = false;
+            captureBtn.innerText = "計算を実行";
+        });
+
+        startCamera();
+    </script>
+</body>
+</html>
